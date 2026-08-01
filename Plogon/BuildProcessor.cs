@@ -1161,6 +1161,19 @@ public class BuildProcessor
                 Log.Error(ex, "Icon validation failed");
                 throw new MissingIconException($"Icon validation failed: {ex.Message}", ex);
             }
+            var images = Directory.EnumerateFiles(imagesSourcePath).Where(t => Path.GetFileName(t) != "icon.png");
+            foreach (var file in images)
+            {
+                using var image = Image.Load(file);
+                if (image.Metadata.DecodedImageFormat != SixLabors.ImageSharp.Formats.Png.PngFormat.Instance)
+                {
+                    throw new MissingIconException($"Image {file} is not a valid PNG file.");
+                }
+                if (image.Width > 730 || image.Height > 380)
+                {
+                    throw new MissingIconException($"Image {file} dimensions must not exceed 730x380.");
+                }
+            }
         }
 
         await this.dockerClient.Containers.RemoveContainerAsync(containerCreateResponse.ID,
@@ -1335,6 +1348,12 @@ public class BuildProcessor
                     var manifestObj = JObject.Parse(manifestText);
                     manifestObj["_isDip17Plugin"] = true;
                     manifestObj["_Dip17Channel"] = task.Channel;
+
+                    // if RepoUrl is not set, set it to the repository URL from the manifest
+                    if (string.IsNullOrWhiteSpace(manifestObj["RepoUrl"]?.ToString()))
+                    {
+                        manifestObj["RepoUrl"] = task.Manifest.Plugin.Repository;
+                    }
 
                     await File.WriteAllTextAsync(manifestFile.FullName, manifestObj.ToString());
                 }
